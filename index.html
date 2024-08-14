@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serene Noise Generator</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #e0f7fa, #b2ebf2);
+            color: #37474f;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+        h1 {
+            font-weight: 600;
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: #00838f;
+        }
+        select, button {
+            width: 100%;
+            padding: 0.8rem;
+            margin: 0.5rem 0;
+            border-radius: 10px;
+            border: 1px solid #b2ebf2;
+            background: white;
+            color: #00838f;
+            font-family: 'Poppins', sans-serif;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        select:hover, button:hover {
+            background: #e0f7fa;
+        }
+        button {
+            background: #00838f;
+            color: white;
+            font-weight: 600;
+            border: none;
+        }
+        button:hover {
+            background: #006064;
+        }
+        #volume {
+            width: 100%;
+            margin: 1.5rem 0;
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        #volume::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: #b2ebf2;
+            border-radius: 2px;
+        }
+        #volume::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #00838f;
+            cursor: pointer;
+            margin-top: -7px;
+            box-shadow: 0 0 5px rgba(0, 131, 143, 0.3);
+        }
+        label {
+            display: block;
+            margin-top: 0.5rem;
+            font-weight: 300;
+            color: #00838f;
+        }
+        #visualizer {
+            width: 100%;
+            height: 150px;
+            background-color: #e0f7fa;
+            border-radius: 10px;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Noise Generator</h1>
+        <canvas id="visualizer"></canvas>
+        <select id="visualizerType">
+            <option value="waveform">Waveform</option>
+            <option value="bars">Frequency Bars</option>
+            <option value="circles">Pulsating Circles</option>
+        </select>
+        <select id="noiseType">
+            <option value="white">Balanced</option>
+            <option value="pink">Lower Frequencies</option>
+            <option value="blue">Higher Frequencies</option>
+        </select>
+        <select id="wavePattern">
+            <option value="none">Constant</option>
+            <option value="long">Long Wave</option>
+            <option value="short">Short Wave</option>
+        </select>
+        <button id="toggleNoise">Start</button>
+        <input type="range" id="volume" min="0" max="1" step="0.01" value="0.5">
+        <label for="volume">Volume</label>
+    </div>
+    <script>
+        let audioContext;
+        let noiseNode;
+        let gainNode;
+        let analyser;
+        let isPlaying = false;
+        let wavePhase = 0;
+        const toggleButton = document.getElementById('toggleNoise');
+        const volumeSlider = document.getElementById('volume');
+        const noiseTypeSelect = document.getElementById('noiseType');
+        const wavePatternSelect = document.getElementById('wavePattern');
+        const visualizerTypeSelect = document.getElementById('visualizerType');
+        const canvas = document.getElementById('visualizer');
+        const canvasCtx = canvas.getContext('2d');
+
+        function createNoise() {
+            const bufferSize = 4096;
+            noiseNode = audioContext.createScriptProcessor(bufferSize, 1, 1);
+            
+            let b0, b1, b2, b3, b4, b5, b6;
+            b0 = b1 = b2 = b3 = b4 = b5 = b6 = 0.0;
+            
+            noiseNode.onaudioprocess = function(e) {
+                const output = e.outputBuffer.getChannelData(0);
+                const noiseType = noiseTypeSelect.value;
+                const wavePattern = wavePatternSelect.value;
+
+                for (let i = 0; i < bufferSize; i++) {
+                    let white = Math.random() * 2 - 1;
+                    let noise;
+
+                    if (noiseType === 'pink') {
+                        b0 = 0.99886 * b0 + white * 0.0555179;
+                        b1 = 0.99332 * b1 + white * 0.0750759;
+                        b2 = 0.96900 * b2 + white * 0.1538520;
+                        b3 = 0.86650 * b3 + white * 0.3104856;
+                        b4 = 0.55000 * b4 + white * 0.5329522;
+                        b5 = -0.7616 * b5 - white * 0.0168980;
+                        noise = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+                        noise *= 0.11;
+                        b6 = white * 0.115926;
+                    } else if (noiseType === 'blue') {
+                        b0 = 0.98 * b0 + white * 0.02;
+                        noise = white - b0;
+                        noise *= 0.5;
+                    } else { // white noise
+                        noise = white * 0.5;
+                    }
+
+                    let waveModulation = 1;
+                    if (wavePattern !== 'none') {
+                        wavePhase += 1 / audioContext.sampleRate;
+                        if (wavePattern === 'long') {
+                            waveModulation = 0.75 + 0.25 * Math.sin(2 * Math.PI * 0.1 * wavePhase);
+                        } else if (wavePattern === 'short') {
+                            waveModulation = 0.75 + 0.25 * Math.sin(2 * Math.PI * 0.5 * wavePhase);
+                        }
+                    }
+
+                    output[i] = noise * waveModulation;
+                }
+            }
+
+            gainNode = audioContext.createGain();
+            gainNode.gain.value = volumeSlider.value;
+
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 512;
+            analyser.smoothingTimeConstant = 0.8;
+
+            noiseNode.connect(gainNode);
+            gainNode.connect(analyser);
+            analyser.connect(audioContext.destination);
+        }
+
+        function toggleNoise() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (!isPlaying) {
+                createNoise();
+                isPlaying = true;
+                toggleButton.textContent = 'Stop';
+                visualize();
+            } else {
+                noiseNode.disconnect();
+                gainNode.disconnect();
+                analyser.disconnect();
+                isPlaying = false;
+                toggleButton.textContent = 'Start';
+                canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        function updateVolume() {
+            if (gainNode) {
+                gainNode.gain.value = volumeSlider.value;
+            }
+        }
+
+        function changeNoiseType() {
+            if (isPlaying) {
+                noiseNode.disconnect();
+                gainNode.disconnect();
+                analyser.disconnect();
+                createNoise();
+            }
+        }
+
+        let previousBarHeights = [];
+
+        function visualize() {
+            const WIDTH = canvas.width;
+            const HEIGHT = canvas.height;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
+
+            function draw() {
+                requestAnimationFrame(draw);
+
+                const visualizerType = visualizerTypeSelect.value;
+
+                if (visualizerType === 'waveform') {
+                    analyser.getByteTimeDomainData(dataArray);
+                    canvasCtx.fillStyle = '#e0f7fa';
+                    canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+                    canvasCtx.lineWidth = 2;
+                    canvasCtx.strokeStyle = '#00838f';
+                    canvasCtx.beginPath();
+
+                    const sliceWidth = WIDTH * 1.0 / bufferLength;
+                    let x = 0;
+
+                    for (let i = 0; i < bufferLength; i++) {
+                        const v = dataArray[i] / 128.0;
+                        const y = v * HEIGHT / 2;
+
+                        if (i === 0) {
+                            canvasCtx.moveTo(x, y);
+                        } else {
+                            canvasCtx.lineTo(x, y);
+                        }
+
+                        x += sliceWidth;
+                    }
+
+                    canvasCtx.lineTo(canvas.width, canvas.height / 2);
+                    canvasCtx.stroke();
+                } else if (visualizerType === 'bars') {
+                    analyser.getByteFrequencyData(dataArray);
+                    canvasCtx.fillStyle = '#e0f7fa';
+                    canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+
+                    const barWidth = (WIDTH / bufferLength) * 2.5;
+                    let x = 0;
+
+                    for (let i = 0; i < bufferLength; i++) {
+                        let barHeight = dataArray[i] / 2;
+                        
+                        if (previousBarHeights[i]) {
+                            barHeight = previousBarHeights[i] * 0.8 + barHeight * 0.2;
+                        }
+                        previousBarHeights[i] = barHeight;
+
+                        const hue = i / bufferLength * 180 + 180;
+                        canvasCtx.fillStyle = `hsl(${hue}, 70%, 60%)`;
+                        canvasCtx.fillRect(x, HEIGHT - barHeight, barWidth, barHeight);
+
+                        x += barWidth + 1;
+                    }
+                } else if (visualizerType === 'circles') {
+                    analyser.getByteFrequencyData(dataArray);
+                    canvasCtx.fillStyle = '#e0f7fa';
+                    canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+
+                    const centerX = WIDTH / 2;
+                    const centerY = HEIGHT / 2;
+                    const maxRadius = Math.min(WIDTH, HEIGHT) / 2;
+
+                    for (let i = 0; i < 5; i++) {
+                        const radius = (dataArray[i * 20] / 255) * maxRadius * 0.8;
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                        canvasCtx.fillStyle = `hsla(${i * 60}, 70%, 60%, ${0.2 - i * 0.03})`;
+                        canvasCtx.fill();
+                    }
+                }
+            }
+
+            draw();
+        }
+
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+
+        toggleButton.addEventListener('click', toggleNoise);
+        volumeSlider.addEventListener('input', updateVolume);
+        noiseTypeSelect.addEventListener('change', changeNoiseType);
+        wavePatternSelect.addEventListener('change', changeNoiseType);
+        visualizerTypeSelect.addEventListener('change', () => {
+            if (isPlaying) {
+                visualize();
+            }
+        });
+        window.addEventListener('resize', resizeCanvas);
+
+        resizeCanvas();
+    </script>
+</body>
+</html>
